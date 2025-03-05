@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="mb-8">
+    <div class="flex justify-between items-center mb-4">
+        <h1 class="text-2xl font-bold">Tasks</h1>
+        <a href="/tasks/new" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">
+            Add New Task
+        </a>
+    </div>
+
+    <div class="space-y-8">
+        <!-- Active Tasks -->
+        <div>
+            <h2 class="text-xl font-semibold mb-4">Active Tasks</h2>
+            <div id="active-tasks" class="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+                <!-- Tasks will be populated here -->
+            </div>
+        </div>
+
+        <!-- Inactive Tasks -->
+        <div>
+            <h2 class="text-xl font-semibold mb-4">Inactive Tasks</h2>
+            <div id="inactive-tasks" class="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+                <!-- Tasks will be populated here -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Task Card Template -->
+<template id="task-card-template">
+    <a href="#" class="task-link block">
+        <div class="bg-gray-800 hover:bg-gray-700 rounded-lg p-4 shadow transition duration-150">
+            <div class="flex justify-between items-start mb-2">
+                <h3 class="text-lg font-semibold task-name"></h3>
+                <span class="status-badge px-2 py-1 text-sm rounded"></span>
+            </div>
+            <p class="text-gray-400 task-description mb-4 text-sm"></p>
+            <div class="space-y-2 text-sm">
+                <div class="flex justify-between">
+                    <span>Next Run:</span>
+                    <span class="next-run"></span>
+                </div>
+                <div class="flex justify-between">
+                    <span>Total Runs:</span>
+                    <span class="total-runs"></span>
+                </div>
+            </div>
+        </div>
+    </a>
+</template>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    async function fetchTasks() {
+        const response = await fetch('/api/tasks');
+        const tasks = await response.json();
+        
+        const activeTasks = tasks.filter(task => task.is_active);
+        const inactiveTasks = tasks.filter(task => !task.is_active);
+        
+        document.getElementById('active-tasks').innerHTML = '';
+        document.getElementById('inactive-tasks').innerHTML = '';
+        
+        activeTasks.forEach(task => renderTask(task, 'active-tasks'));
+        inactiveTasks.forEach(task => renderTask(task, 'inactive-tasks'));
+    }
+
+    function renderTask(task, containerId) {
+        const template = document.getElementById('task-card-template');
+        const card = template.content.cloneNode(true);
+        
+        card.querySelector('.task-name').textContent = task.name;
+        card.querySelector('.task-description').textContent = task.description;
+        card.querySelector('.next-run').textContent = task.next_run ? new Date(task.next_run).toLocaleString() : 'Not scheduled';
+        card.querySelector('.total-runs').textContent = task.total_runs;
+        
+        const statusBadge = card.querySelector('.status-badge');
+        if (task.last_run) {
+            statusBadge.textContent = task.last_run.status;
+            statusBadge.classList.add(
+                task.last_run.status === 'success' ? 'bg-green-600' :
+                task.last_run.status === 'failure' ? 'bg-red-600' :
+                task.last_run.status === 'running' ? 'bg-yellow-600' : 'bg-gray-600'
+            );
+        } else {
+            statusBadge.textContent = 'No runs';
+            statusBadge.classList.add('bg-gray-600');
+        }
+        
+        card.querySelector('.task-link').href = `/tasks/${task.id}`;
+        
+        document.getElementById(containerId).appendChild(card);
+    }
+
+    // Initial load
+    fetchTasks();
+    
+    // Refresh every 30 seconds
+    setInterval(fetchTasks, 30000);
+</script>
+{% endblock %}

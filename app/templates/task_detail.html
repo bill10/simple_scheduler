@@ -1,0 +1,713 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="mb-8">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold task-name"></h1>
+        <div class="space-x-4">
+            <button id="test-run" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded">
+                Test Run
+            </button>
+            <button id="toggle-active" class="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded">
+                Pause/Resume
+            </button>
+            <button id="edit-task" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">
+                Edit
+            </button>
+            <button id="delete-task" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded">
+                Delete
+            </button>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <!-- Task Details -->
+        <div class="bg-gray-800 rounded-lg p-6">
+            <h2 class="text-xl font-semibold mb-4">Task Details</h2>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-400">Description</label>
+                    <p class="task-description mt-1"></p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-400">Script</label>
+                    <p class="script-path mt-1"></p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-400">Schedule</label>
+                    <p class="cron-schedule mt-1"></p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-400">Extra Arguments</label>
+                    <p class="extra-args mt-1"></p>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-400">Start Date (UTC)</label>
+                        <p class="start-date mt-1"></p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-400">End Date (UTC)</label>
+                        <p class="end-date mt-1"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statistics -->
+        <div class="bg-gray-800 rounded-lg p-6">
+            <h2 class="text-xl font-semibold mb-4">Statistics</h2>
+            <div class="grid grid-cols-2 gap-4 mb-6">
+                <div class="bg-gray-700 rounded p-4">
+                    <div class="text-sm text-gray-400">Total Runs</div>
+                    <div class="text-2xl font-bold total-runs mt-1">0</div>
+                </div>
+                <div class="bg-gray-700 rounded p-4">
+                    <div class="text-sm text-gray-400">Success Rate</div>
+                    <div class="text-2xl font-bold success-rate mt-1">0%</div>
+                </div>
+            </div>
+            <div>
+                <canvas id="duration-chart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Calendar View -->
+    <!-- Backfill Section -->
+    <div class="mt-8 bg-gray-800 rounded-lg p-6">
+        <h2 class="text-xl font-semibold mb-4">Backfill Task</h2>
+        <div id="backfill-status" class="mb-4 hidden">
+            <div class="bg-gray-700 p-4 rounded">
+                <h3 class="font-medium mb-2">Active Backfill</h3>
+                <div class="space-y-2 text-sm">
+                    <div>Time Range: <span id="backfill-time-range"></span></div>
+                    <div>Progress: <span id="backfill-progress"></span></div>
+                    <div class="w-full bg-gray-600 rounded-full h-2.5">
+                        <div id="backfill-progress-bar" class="bg-green-600 h-2.5 rounded-full" style="width: 0%"></div>
+                    </div>
+                    <div>Runs: <span id="backfill-runs"></span></div>
+                    <div>Config: <span id="backfill-config"></span></div>
+                </div>
+            </div>
+        </div>
+        <div id="backfill-form" class="space-y-4">
+            <p class="text-gray-400">Run this task for a period in the past following the task's schedule. Runs will be executed in small batches to avoid overloading the system.</p>
+            
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label for="backfill_start" class="block text-sm font-medium text-gray-400">Start Time (Local)</label>
+                    <input type="datetime-local" id="backfill_start" name="backfill_start" step="1"
+                        class="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white px-3 py-2"
+                        onchange="updateUTCDisplay('backfill_start', 'backfill_start_utc')">
+                    <p id="backfill_start_utc" class="mt-1 text-sm text-gray-400"></p>
+                </div>
+                
+                <div>
+                    <label for="backfill_end" class="block text-sm font-medium text-gray-400">End Time (Local)</label>
+                    <input type="datetime-local" id="backfill_end" name="backfill_end" step="1"
+                        class="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white px-3 py-2"
+                        onchange="updateUTCDisplay('backfill_end', 'backfill_end_utc')">
+                    <p id="backfill_end_utc" class="mt-1 text-sm text-gray-400"></p>
+                </div>
+            </div>
+
+            <!-- Execution Configuration -->
+            <div class="grid grid-cols-2 gap-4 mt-4">
+                <div>
+                    <label for="concurrent_runs" class="block text-sm font-medium text-gray-400">
+                        Max Concurrent Runs
+                        <span class="text-xs text-gray-500">(1-10)</span>
+                    </label>
+                    <input type="number" id="concurrent_runs" name="concurrent_runs" min="1" max="10" value="3"
+                        class="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white px-3 py-2">
+                    <p class="mt-1 text-xs text-gray-500">Maximum number of runs to execute simultaneously</p>
+                </div>
+                
+                <div>
+                    <label for="batch_size" class="block text-sm font-medium text-gray-400">
+                        Batch Size
+                        <span class="text-xs text-gray-500">(1-20)</span>
+                    </label>
+                    <input type="number" id="batch_size" name="batch_size" min="1" max="20" value="5"
+                        class="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white px-3 py-2">
+                    <p class="mt-1 text-xs text-gray-500">Number of runs to process in each batch</p>
+                </div>
+            </div>
+            
+            <div class="flex justify-end">
+                <button id="backfill-task" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">
+                    Start Backfill
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-8 bg-gray-800 rounded-lg p-6">
+        <h2 class="text-xl font-semibold mb-4">Run History</h2>
+        <div id="calendar" class="grid grid-cols-7 gap-2 max-w-4xl mx-auto">
+            <!-- Calendar blocks will be populated here -->
+        </div>
+    </div>
+
+    <!-- Run List -->
+    <div id="run-list" class="mt-8 -ml-4">
+        <!-- Run list will be populated here -->
+    </div>
+</div>
+
+<!-- Log Modal -->
+<div id="log-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden">
+    <div class="fixed inset-10 bg-gray-800 rounded-lg p-6 overflow-auto">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-xl font-semibold">Run Log</h3>
+            <button class="close-modal text-gray-400 hover:text-white">&times;</button>
+        </div>
+        <pre id="log-content" class="bg-gray-900 p-4 rounded overflow-auto font-mono text-sm whitespace-pre-wrap"></pre>
+    </div>
+</div>
+
+<!-- Test Run Modal -->
+<div id="test-run-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden">
+    <div class="fixed inset-10 bg-gray-800 rounded-lg p-6 overflow-auto">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-xl font-semibold">Test Run Output</h3>
+            <button class="close-modal text-gray-400 hover:text-white">&times;</button>
+        </div>
+        <pre id="test-run-output" class="bg-gray-900 p-4 rounded overflow-auto"></pre>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="text/javascript">
+    const taskId = window.location.pathname.split('/').pop();
+    let task = null;
+    let durationChart = null;
+
+    async function loadTask() {
+        const response = await fetch(`/api/tasks/${taskId}`);
+        task = await response.json();
+        
+        document.querySelector('.task-name').textContent = task.name;
+        document.querySelector('.task-description').textContent = task.description;
+        document.querySelector('.script-path').textContent = task.script_path;
+        document.querySelector('.cron-schedule').textContent = task.cron_schedule;
+        document.querySelector('.extra-args').textContent = task.extra_args || 'None';
+        document.querySelector('.start-date').textContent = task.start_date ? new Date(task.start_date).toLocaleDateString() : 'Not set';
+        document.querySelector('.end-date').textContent = task.end_date ? new Date(task.end_date).toLocaleDateString() : 'Not set';
+        
+        document.getElementById('toggle-active').textContent = task.is_active ? 'Pause' : 'Resume';
+    }
+
+    async function loadStatistics() {
+        const response = await fetch(`/api/tasks/${taskId}/runs`);
+        const runs = await response.json();
+        
+        document.querySelector('.total-runs').textContent = runs.length;
+        
+        if (runs.length > 0) {
+            const successfulRuns = runs.filter(run => run.status === 'success').length;
+            const successRate = ((successfulRuns / runs.length) * 100).toFixed(1);
+            document.querySelector('.success-rate').textContent = `${successRate}%`;
+            
+            // Destroy existing chart if it exists
+            if (durationChart) {
+                durationChart.destroy();
+            }
+            
+            // Create new chart
+            const ctx = document.getElementById('duration-chart').getContext('2d');
+            durationChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: runs.map(run => new Date(run.start_time).toLocaleString('en-US', { timeZone: 'UTC' })),
+                    datasets: [{
+                        label: 'Duration (seconds)',
+                        data: runs.map(run => run.duration),
+                        backgroundColor: runs.map(run => 
+                            run.status === 'success' ? '#059669' : '#DC2626'
+                        )
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+    }
+
+    function renderCalendar() {
+        const calendar = document.getElementById('calendar');
+        calendar.innerHTML = '';
+        
+        // Generate last 30 days in UTC
+        for (let i = 29; i >= 0; i--) {
+            const date = new Date();
+            date.setUTCDate(date.getUTCDate() - i);
+            
+            const block = document.createElement('div');
+            block.className = 'aspect-square bg-gray-700 rounded cursor-pointer hover:opacity-80 flex flex-col items-center justify-center text-sm';
+            block.dataset.dayOffset = i;
+            block.innerHTML = `
+                <div>${date.getUTCDate()}</div>
+                <div class="text-xs text-gray-400">${date.toLocaleString('default', { month: 'short', timeZone: 'UTC' })}</div>
+            `;
+            
+            block.addEventListener('click', () => loadRunsForDate(date));
+            calendar.appendChild(block);
+        }
+    }
+
+    async function loadRunsForDate(date) {
+        const dateStr = date.toISOString().split('T')[0];
+        const response = await fetch(`/api/tasks/${taskId}/runs?date=${dateStr}`);
+        const runs = await response.json();
+        
+        const runList = document.getElementById('run-list');
+        const statusClasses = {
+            'success': 'bg-green-600',
+            'failure': 'bg-red-600',
+            'running': 'bg-yellow-600',
+            'pending': 'bg-gray-600'
+        };
+
+        // Always show the header and container
+        runList.innerHTML = `
+            <h3 class="text-xl font-semibold mb-4">Runs for ${date.toLocaleDateString('en-US', { timeZone: 'UTC' })} (UTC)</h3>
+            <div class="space-y-4 ml-4">
+                ${runs.length === 0 ? 
+                    '<div class="text-gray-400">No runs found for this date</div>' :
+                    runs.map(run => `
+                        <div class="bg-gray-700 rounded p-4 flex justify-between items-center">
+                            <div>
+                                <div class="font-medium">${new Date(run.start_time).toLocaleTimeString('en-US', { timeZone: 'UTC' })}</div>
+                                <div class="text-sm text-gray-400">
+                                    ${run.status === 'pending' ? 'Pending...' : 
+                                      run.status === 'running' ? 'Running...' : 
+                                      `Duration: ${run.duration ? run.duration.toFixed(2) + 's' : 'N/A'}`}
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                ${run.status !== 'pending' ? `
+                                    <button onclick="viewLog(${run.id})" class="text-gray-400 hover:text-white">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                            <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
+                                            <path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd" />
+                                        </svg>
+                                    </button>
+                                ` : ''}
+                                <span class="px-2 py-1 rounded text-sm ${statusClasses[run.status] || 'bg-gray-600'}">
+                                    ${run.status}
+                                </span>
+                            </div>
+                        </div>
+                    `).join('')
+                }
+            </div>
+        `;
+    }
+
+    // Event Listeners
+    document.getElementById('test-run').addEventListener('click', async () => {
+        const modal = document.getElementById('test-run-modal');
+        const output = document.getElementById('test-run-output');
+        modal.classList.remove('hidden');
+        output.textContent = 'Running test...';
+        
+        try {
+            const response = await fetch(`/api/tasks/${taskId}/test`, {
+                method: 'POST'
+            });
+            const result = await response.json();
+            output.textContent = result.output;
+        } catch (error) {
+            output.textContent = `Error: ${error.message}`;
+        }
+    });
+
+    document.getElementById('toggle-active').addEventListener('click', async () => {
+        const response = await fetch(`/api/tasks/${taskId}/toggle`, {
+            method: 'POST'
+        });
+        const result = await response.json();
+        task.is_active = result.is_active;
+        document.getElementById('toggle-active').textContent = result.is_active ? 'Pause' : 'Resume';
+    });
+
+    document.getElementById('edit-task').addEventListener('click', () => {
+        window.location.href = `/tasks/${taskId}/edit`;
+    });
+
+    document.getElementById('delete-task').addEventListener('click', async () => {
+        if (confirm('Warning: Deleting this task will permanently remove all associated runs and log files. This action cannot be undone. Are you sure you want to proceed?')) {
+            try {
+                const response = await fetch(`/api/tasks/${taskId}`, {
+                    method: 'DELETE'
+                });
+                if (!response.ok) {
+                    const error = await response.json();
+                    alert(`Error deleting task: ${error.error || 'Unknown error'}`);
+                    return;
+                }
+                window.location.href = '/';
+            } catch (error) {
+                alert(`Error deleting task: ${error.message}`);
+            }
+        }
+    });
+
+    // Close modal buttons
+    document.querySelectorAll('.close-modal').forEach(button => {
+        button.addEventListener('click', () => {
+            document.getElementById('test-run-modal').classList.add('hidden');
+            document.getElementById('log-modal').classList.add('hidden');
+        });
+    });
+
+    // View log function
+    async function viewLog(runId) {
+        const modal = document.getElementById('log-modal');
+        const content = document.getElementById('log-content');
+        modal.classList.remove('hidden');
+        content.textContent = 'Loading log...';
+        
+        try {
+            const response = await fetch(`/api/tasks/runs/${runId}/log`);
+            const data = await response.json();
+            
+            if (response.ok) {
+                content.textContent = data.content || '(No log content)';
+            } else {
+                content.textContent = `Error: ${data.error || 'Failed to load log'}`;
+            }
+        } catch (error) {
+            content.textContent = `Error: ${error.message}`;
+        }
+    }
+
+    // Calendar color update function
+    async function updateCalendarColors(calendar) {
+        const currentDate = calendar.selectedDates[0] || new Date();
+        const year = currentDate.getFullYear();
+        const month = currentDate.getMonth();
+        const firstDay = new Date(year, month, 1);
+        const lastDay = new Date(year, month + 1, 0);
+        
+        const response = await fetch(
+            `/api/tasks/${taskId}/run-status?` +
+            `start_date=${firstDay.toISOString().split('T')[0]}&` +
+            `end_date=${lastDay.toISOString().split('T')[0]}`
+        );
+        const statusData = await response.json();
+        
+        // Get all day elements
+        const days = document.querySelectorAll('.vanilla-calendar-date');
+        days.forEach(day => {
+            const dateAttr = day.getAttribute('data-calendar-date');
+            if (dateAttr) {
+                const status = statusData[dateAttr]?.status;
+                if (status === 'success') {
+                    day.style.backgroundColor = '#059669'; // Green
+                } else if (status === 'failure') {
+                    day.style.backgroundColor = '#dc2626'; // Red
+                }
+            }
+        });
+    }
+
+    async function updateCalendarColors() {
+        // Get the run status for the last 30 days
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - 29);
+        
+        const response = await fetch(
+            `/api/tasks/${taskId}/run-status?` +
+            `start_date=${startDate.toISOString().split('T')[0]}&` +
+            `end_date=${endDate.toISOString().split('T')[0]}`
+        );
+        const statusData = await response.json();
+        
+        // Update calendar blocks
+        const blocks = document.querySelectorAll('#calendar > div');
+        blocks.forEach(block => {
+            const date = new Date();
+            date.setDate(date.getDate() - parseInt(block.dataset.dayOffset));
+            const dateStr = date.toISOString().split('T')[0];
+            
+            const status = statusData[dateStr]?.status;
+            if (status === 'success') {
+                block.classList.remove('bg-gray-700', 'bg-red-600');
+                block.classList.add('bg-green-600');
+            } else if (status === 'failure') {
+                block.classList.remove('bg-gray-700', 'bg-green-600');
+                block.classList.add('bg-red-600');
+            }
+        });
+    }
+
+    // Backfill functionality
+    document.getElementById('backfill-task').addEventListener('click', async () => {
+        const startInput = document.getElementById('backfill_start');
+        const endInput = document.getElementById('backfill_end');
+        
+        // Convert local datetime-local value to ISO string
+        const startTime = startInput.value ? new Date(startInput.value).toISOString() : '';
+        const endTime = endInput.value ? new Date(endInput.value).toISOString() : '';
+        
+        if (!startTime || !endTime) {
+            alert('Please select both start and end times');
+            return;
+        }
+        
+        const batchSize = parseInt(document.getElementById('batch_size').value, 10);
+        if (confirm(`This will create and execute task runs for the specified time period. Runs will be processed in batches of ${batchSize} to avoid overloading the system. Continue?`)) {
+            const button = document.getElementById('backfill-task');
+            const backfillForm = document.getElementById('backfill-form');
+            const backfillStatus = document.getElementById('backfill-status');
+            const progressBar = document.getElementById('backfill-progress-bar');
+            
+            try {
+                const requestBody = {
+                    start_time: startTime,
+                    end_time: endTime,
+                    max_concurrent_runs: parseInt(document.getElementById('concurrent_runs').value, 10),
+                    batch_size: parseInt(document.getElementById('batch_size').value, 10)
+                };
+                
+                // Prepare UI for backfill
+                button.disabled = true;
+                button.textContent = 'Starting...';
+                backfillForm.classList.add('hidden');
+                backfillStatus.classList.remove('hidden');
+                
+                // Show initial status
+                progressBar.style.width = '0%';
+                document.getElementById('backfill-progress').textContent = '0%';
+                document.getElementById('backfill-time-range').textContent = 
+                    `${new Date(startTime).toLocaleString('en-US', { timeZone: 'UTC' })} to ${new Date(endTime).toLocaleString('en-US', { timeZone: 'UTC' })}`;
+                document.getElementById('backfill-runs').textContent = 'Starting...';
+                document.getElementById('backfill-config').textContent = 
+                    `${requestBody.max_concurrent_runs} concurrent, batch size ${requestBody.batch_size}`;
+                
+                const response = await fetch(`/api/tasks/${taskId}/backfill`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+                
+                const result = await response.json();
+                if (!response.ok) {
+                    throw new Error(result.error || 'Failed to backfill task');
+                }
+                
+                // Start tracking this backfill
+                isBackfillRunning = true;
+                
+                // Show initial status
+                backfillForm.classList.add('hidden');
+                backfillStatus.classList.remove('hidden');
+                button.disabled = true;
+                button.textContent = 'Running...';
+                progressBar.style.width = '0%';
+                document.getElementById('backfill-progress').textContent = '0%';
+                document.getElementById('backfill-runs').textContent = 'Starting...';
+                
+                // Start polling for status updates
+                if (backfillStatusInterval) {
+                    clearInterval(backfillStatusInterval);
+                }
+                backfillStatusInterval = setInterval(checkBackfillStatus, 2000);
+                
+                // Removed redundant alert - status will be shown in the UI
+            } catch (error) {
+                console.error('Backfill error:', error);
+                alert(`Error: ${error.message}`);
+                
+                // Reset UI on error
+                button.disabled = false;
+                button.textContent = 'Start Backfill';
+                backfillForm.classList.remove('hidden');
+                backfillStatus.classList.add('hidden');
+                isBackfillRunning = false;
+                if (backfillStatusInterval) {
+                    clearInterval(backfillStatusInterval);
+                }
+            }
+        }
+    });
+
+    // Time formatting utility
+    function formatLocalTime(utcTime) {
+        if (!utcTime) return 'Not set';
+        const date = new Date(utcTime);
+        return `${date.toLocaleString()} UTC`;
+    }
+
+    function formatLocalDate(utcTime) {
+        if (!utcTime) return 'Not set';
+        const date = new Date(utcTime);
+        return `${date.toLocaleDateString()} UTC`;
+    }
+
+    function formatLocalTimeOnly(utcTime) {
+        if (!utcTime) return 'Not set';
+        const date = new Date(utcTime);
+        return `${date.toLocaleTimeString()} UTC`;
+    }
+
+    function updateUTCDisplay(inputId, displayId) {
+        const input = document.getElementById(inputId);
+        const display = document.getElementById(displayId);
+        if (input.value) {
+            const localDate = new Date(input.value);
+            const utcString = localDate.toISOString();
+            display.textContent = `UTC: ${utcString}`;
+        } else {
+            display.textContent = '';
+        }
+    }
+
+    let backfillStatusInterval;
+    let isBackfillRunning = false;
+
+    async function checkBackfillStatus() {
+        if (!isBackfillRunning) {
+            return; // Don't check status if we're not tracking a backfill
+        }
+        
+        try {
+            const response = await fetch(`/api/tasks/${taskId}/backfill/status`);
+            if (!response.ok) {
+                throw new Error('Failed to fetch backfill status');
+            }
+            
+            const status = await response.json();
+            const backfillForm = document.getElementById('backfill-form');
+            const backfillStatus = document.getElementById('backfill-status');
+            const button = document.getElementById('backfill-task');
+            const progressBar = document.getElementById('backfill-progress-bar');
+            
+            if (status.status) {
+                // Always show status while running
+                backfillStatus.classList.remove('hidden');
+                backfillForm.classList.add('hidden');
+                
+                // Update progress
+                const progress = status.progress || 0;
+                document.getElementById('backfill-progress').textContent = `${progress}%`;
+                progressBar.style.width = `${progress}%`;
+                
+                // Update run counts
+                const completed = status.completed_runs || 0;
+                const total = status.total_runs || 0;
+                const successful = status.successful_runs || 0;
+                document.getElementById('backfill-runs').textContent = 
+                    `${completed}/${total} completed (${successful} successful)`;
+                
+                if (status.status === 'running') {
+                    button.disabled = true;
+                    button.textContent = 'Running...';
+                } else if (status.status === 'completed' || status.status === 'failed') {
+                    // Stop polling and update UI
+                    clearInterval(backfillStatusInterval);
+                    backfillForm.classList.remove('hidden');
+                    button.disabled = false;
+                    button.textContent = 'Start Backfill';
+                    
+                    if (status.status === 'completed') {
+                        loadStatistics();
+                        renderCalendar();
+                    }
+                    isBackfillRunning = false;
+                }
+            } else {
+                // No status available, reset UI
+                clearInterval(backfillStatusInterval);
+                backfillStatus.classList.add('hidden');
+                backfillForm.classList.remove('hidden');
+                button.disabled = false;
+                button.textContent = 'Start Backfill';
+                isBackfillRunning = false;
+            }
+        } catch (error) {
+            console.error('Error checking backfill status:', error);
+            // Don't reset on temporary errors, let it try again
+        }
+    }
+
+    // Initial load
+    loadTask();
+    loadStatistics();
+    renderCalendar();
+    updateCalendarColors();
+    
+    // Check if there's an active backfill and start polling if needed
+    async function checkInitialBackfillState() {
+        try {
+            const response = await fetch(`/api/tasks/${taskId}/backfill/status`);
+            if (!response.ok) {
+                throw new Error('Failed to fetch initial backfill status');
+            }
+            
+            const status = await response.json();
+            if (status.status === 'running') {
+                // Set running state
+                isBackfillRunning = true;
+                
+                // Show backfill progress UI
+                const backfillForm = document.getElementById('backfill-form');
+                const backfillStatus = document.getElementById('backfill-status');
+                const button = document.getElementById('backfill-task');
+                const progressBar = document.getElementById('backfill-progress-bar');
+                
+                backfillForm.classList.add('hidden');
+                backfillStatus.classList.remove('hidden');
+                button.disabled = true;
+                button.textContent = 'Running...';
+                
+                // Update progress
+                const progress = status.progress || 0;
+                progressBar.style.width = `${progress}%`;
+                document.getElementById('backfill-progress').textContent = `${progress}%`;
+                
+                // Update run counts
+                const completed = status.completed_runs || 0;
+                const total = status.total_runs || 0;
+                const successful = status.successful_runs || 0;
+                document.getElementById('backfill-runs').textContent = 
+                    `${completed}/${total} completed (${successful} successful)`;
+                
+                // Update time range and config
+                if (status.start_time && status.end_time) {
+                    document.getElementById('backfill-time-range').textContent = 
+                        `${new Date(status.start_time).toLocaleString('en-US', { timeZone: 'UTC' })} to ${new Date(status.end_time).toLocaleString('en-US', { timeZone: 'UTC' })}`;
+                }
+                if (status.max_concurrent_runs && status.batch_size) {
+                    document.getElementById('backfill-config').textContent = 
+                        `${status.max_concurrent_runs} concurrent, batch size ${status.batch_size}`;
+                }
+                
+                // Start polling
+                if (backfillStatusInterval) {
+                    clearInterval(backfillStatusInterval);
+                }
+                backfillStatusInterval = setInterval(checkBackfillStatus, 2000);
+            }
+        } catch (error) {
+            console.error('Error checking initial backfill status:', error);
+        }
+    }
+    
+    // Check initial state
+    checkInitialBackfillState();
+</script>
+{% endblock %}
