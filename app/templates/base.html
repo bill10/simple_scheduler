@@ -19,8 +19,16 @@
 </head>
 <body class="min-h-screen">
     <nav class="bg-gray-800 p-4">
-        <div class="container mx-auto">
+        <div class="container mx-auto flex justify-between items-center">
             <a href="/" class="text-white text-xl font-bold">Simple Scheduler</a>
+            <div>
+                {% if session.get('is_authenticated') %}
+                <span class="text-gray-300 mr-4">Welcome, {{ session.get('user_id') }}</span>
+                <a href="{{ url_for('auth.logout') }}" class="text-white hover:text-gray-300">Logout</a>
+                {% else %}
+                <a href="{{ url_for('auth.login') }}" class="text-white hover:text-gray-300">Login</a>
+                {% endif %}
+            </div>
         </div>
     </nav>
 

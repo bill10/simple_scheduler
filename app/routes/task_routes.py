@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import pytz
 from flask import Blueprint, jsonify, request, current_app
 from ..models.models import db, Task, TaskRun
+from .auth_routes import login_required
 
 bp = Blueprint('tasks', __name__, url_prefix='/api')
 
@@ -19,6 +20,7 @@ def ensure_utc(dt):
     return dt.astimezone(pytz.UTC)
 
 @bp.route('/tasks', methods=['GET'])
+@login_required
 def get_tasks():
     tasks = Task.query.all()
     return jsonify([{
@@ -32,6 +34,7 @@ def get_tasks():
     } for task in tasks])
 
 @bp.route('/tasks', methods=['POST'])
+@login_required
 def create_task():
     data = request.json
     task = Task(
@@ -49,6 +52,7 @@ def create_task():
     return jsonify({'id': task.id}), 201
 
 @bp.route('/tasks/<int:task_id>', methods=['GET'])
+@login_required
 def get_task(task_id):
     task = Task.query.get_or_404(task_id)
     next_run = calculate_next_run(task)
@@ -77,6 +81,7 @@ def get_task(task_id):
     })
 
 @bp.route('/tasks/<int:task_id>', methods=['PUT'])
+@login_required
 def update_task(task_id):
     task = Task.query.get_or_404(task_id)
     data = request.json
@@ -96,6 +101,7 @@ def update_task(task_id):
     return jsonify({'status': 'success'})
 
 @bp.route('/tasks/<int:task_id>/toggle', methods=['POST'])
+@login_required
 def toggle_task(task_id):
     task = Task.query.get_or_404(task_id)
     task.is_active = not task.is_active
@@ -109,12 +115,14 @@ def toggle_task(task_id):
     return jsonify({'status': 'success', 'is_active': task.is_active})
 
 @bp.route('/tasks/<int:task_id>/test', methods=['POST'])
+@login_required
 def test_task(task_id):
     task = Task.query.get_or_404(task_id)
     result = run_task(task, test_mode=True)
     return jsonify(result)
 
 @bp.route('/tasks/<int:task_id>/runs', methods=['GET'])
+@login_required
 def get_task_runs(task_id):
     task = Task.query.get_or_404(task_id)
     date = request.args.get('date')
@@ -147,6 +155,7 @@ def get_task_runs(task_id):
     } for run in runs])
 
 @bp.route('/tasks/<int:task_id>/run-status', methods=['GET'])
+@login_required
 def get_task_run_status(task_id):
     task = Task.query.get_or_404(task_id)
     start_date = request.args.get('start_date')
@@ -189,6 +198,7 @@ def get_task_run_status(task_id):
     })
 
 @bp.route('/tasks/runs/<int:run_id>/log', methods=['GET'])
+@login_required
 def get_run_log(run_id):
     run = TaskRun.query.get_or_404(run_id)
     if not run.log_file or not os.path.exists(run.log_file):
@@ -327,6 +337,7 @@ def execute_single_run(app, task_id, run_id):
             return False
 
 @bp.route('/tasks/<int:task_id>', methods=['DELETE'])
+@login_required
 def delete_task(task_id):
     task = Task.query.get_or_404(task_id)
     
@@ -357,6 +368,7 @@ def delete_task(task_id):
         return jsonify({'error': 'Failed to delete task'}), 500
 
 @bp.route('/tasks/<int:task_id>/backfill', methods=['POST'])
+@login_required
 def backfill_task(task_id):
     try:
         data = request.json
@@ -531,6 +543,7 @@ def backfill_task(task_id):
     })
 
 @bp.route('/tasks/<int:task_id>/backfill/status', methods=['GET'])
+@login_required
 def get_backfill_status(task_id):
     task = Task.query.get_or_404(task_id)
     if not task.backfill_status:
