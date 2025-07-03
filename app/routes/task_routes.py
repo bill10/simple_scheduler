@@ -124,7 +124,7 @@ def test_task(task_id):
 @bp.route('/tasks/<int:task_id>/runs', methods=['GET'])
 @login_required
 def get_task_runs(task_id):
-    task = Task.query.get_or_404(task_id)
+    Task.query.get_or_404(task_id)  # Verify task exists
     date = request.args.get('date')
     
     query = TaskRun.query.filter_by(task_id=task_id)
@@ -157,27 +157,12 @@ def get_task_runs(task_id):
 @bp.route('/tasks/<int:task_id>/run-status', methods=['GET'])
 @login_required
 def get_task_run_status(task_id):
-    task = Task.query.get_or_404(task_id)
+    Task.query.get_or_404(task_id)  # Verify task exists
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
     
-    query = db.session.query(
-        db.func.strftime('%Y-%m-%d', TaskRun.start_time).label('date'),
-        db.func.max(db.case(
-            (TaskRun.status == 'failure', 1),
-            else_=0
-        )).label('has_failure'),
-        db.func.min(db.case(
-            (TaskRun.status == 'success', 1),
-            else_=0
-        )).label('all_success'),
-        db.func.max(db.case(
-            (TaskRun.status == 'pending', 1),
-            else_=0
-        )).label('has_pending')
-    ).filter(
-        TaskRun.task_id == task_id
-    )
+    # Get all runs for the task within the date range
+    query = TaskRun.query.filter(TaskRun.task_id == task_id)
     
     if start_date and end_date:
         query = query.filter(
@@ -187,15 +172,60 @@ def get_task_run_status(task_id):
             )
         )
     
-    query = query.group_by(db.func.strftime('%Y-%m-%d', TaskRun.start_time))
+    runs = query.order_by(TaskRun.start_time).all()
     
-    results = query.all()
-    return jsonify({
-        date: {
-            'status': 'pending' if has_pending == 1 else 'failure' if has_failure == 1 else 'success' if all_success == 1 else 'mixed'
-        }
-        for date, has_failure, all_success, has_pending in results
-    })
+    # Group runs by date and scheduled time (hour:minute)
+    from collections import defaultdict
+    daily_runs = defaultdict(lambda: defaultdict(list))
+    
+    for run in runs:
+        date_str = run.start_time.strftime('%Y-%m-%d')
+        # Group by scheduled time (hour:minute) to identify reruns
+        time_key = run.start_time.strftime('%H:%M')
+        daily_runs[date_str][time_key].append(run)
+    
+    # Determine status for each date
+    date_statuses = {}
+    
+    for date_str, time_groups in daily_runs.items():
+        all_time_slots_resolved = True
+        has_any_runs = False
+        
+        for time_key, time_runs in time_groups.items():
+            has_any_runs = True
+            # Sort runs by start_time to get chronological order
+            time_runs.sort(key=lambda r: r.start_time)
+            
+            # Check if this time slot is resolved (no unresolved failures)
+            time_slot_resolved = True
+            
+            for run in time_runs:
+                if run.status == 'failure':
+                    # Check if there's a newer successful run after this failure
+                    has_later_success = any(
+                        later_run.status == 'success' and later_run.start_time > run.start_time
+                        for later_run in time_runs
+                    )
+                    if not has_later_success:
+                        time_slot_resolved = False
+                        break
+                elif run.status in ['running', 'pending']:
+                    # Consider running/pending as unresolved for now
+                    time_slot_resolved = False
+            
+            if not time_slot_resolved:
+                all_time_slots_resolved = False
+                break
+        
+        if not has_any_runs:
+            # No runs for this date - don't include in results
+            continue
+        elif all_time_slots_resolved:
+            date_statuses[date_str] = {'status': 'success'}
+        else:
+            date_statuses[date_str] = {'status': 'failure'}
+    
+    return jsonify(date_statuses)
 
 @bp.route('/tasks/runs/<int:run_id>/log', methods=['GET'])
 @login_required

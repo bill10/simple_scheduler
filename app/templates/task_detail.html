@@ -144,7 +144,18 @@
     </div>
 
     <div class="mt-8 bg-gray-800 rounded-lg p-6">
-        <h2 class="text-xl font-semibold mb-4">Run History</h2>
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-semibold">Run History</h2>
+            <div class="flex items-center space-x-4">
+                <button id="calendar-prev" class="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1 rounded text-sm">
+                    ← Previous 30 Days
+                </button>
+                <span id="calendar-period" class="text-sm text-gray-400"></span>
+                <button id="calendar-next" class="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1 rounded text-sm">
+                    Next 30 Days →
+                </button>
+            </div>
+        </div>
         <div id="calendar" class="grid grid-cols-7 gap-2 max-w-4xl mx-auto">
             <!-- Calendar blocks will be populated here -->
         </div>
@@ -184,6 +195,7 @@
     const taskId = window.location.pathname.split('/').pop();
     let task = null;
     let durationChart = null;
+    let calendarOffset = 0; // 0 = current period, -1 = previous 30 days, +1 = next 30 days
 
     async function loadTask() {
         const response = await fetch(`/api/tasks/${taskId}`);
@@ -246,14 +258,28 @@
         const calendar = document.getElementById('calendar');
         calendar.innerHTML = '';
         
-        // Generate last 30 days in UTC
+        // Calculate the base date for this calendar period
+        const baseDate = new Date();
+        baseDate.setUTCDate(baseDate.getUTCDate() + (calendarOffset * 30));
+        
+        // Generate 30 days from the base date
+        const startDate = new Date(baseDate);
+        startDate.setUTCDate(startDate.getUTCDate() - 29);
+        
+        const endDate = new Date(baseDate);
+        
+        // Update period display
+        const periodSpan = document.getElementById('calendar-period');
+        periodSpan.textContent = `${startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })} - ${endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })}`;
+        
+        // Generate calendar blocks
         for (let i = 29; i >= 0; i--) {
-            const date = new Date();
+            const date = new Date(baseDate);
             date.setUTCDate(date.getUTCDate() - i);
             
             const block = document.createElement('div');
             block.className = 'aspect-square bg-gray-700 rounded cursor-pointer hover:opacity-80 flex flex-col items-center justify-center text-sm';
-            block.dataset.dayOffset = i;
+            block.dataset.date = date.toISOString().split('T')[0];
             block.innerHTML = `
                 <div>${date.getUTCDate()}</div>
                 <div class="text-xs text-gray-400">${date.toLocaleString('default', { month: 'short', timeZone: 'UTC' })}</div>
@@ -262,6 +288,9 @@
             block.addEventListener('click', () => loadRunsForDate(date));
             calendar.appendChild(block);
         }
+        
+        // Update navigation button states
+        updateNavigationButtons();
     }
 
     async function loadRunsForDate(date) {
@@ -422,10 +451,13 @@
     }
 
     async function updateCalendarColors() {
-        // Get the run status for the last 30 days
-        const endDate = new Date();
-        const startDate = new Date();
-        startDate.setDate(startDate.getDate() - 29);
+        // Calculate the date range for the current calendar period
+        const baseDate = new Date();
+        baseDate.setUTCDate(baseDate.getUTCDate() + (calendarOffset * 30));
+        
+        const endDate = new Date(baseDate);
+        const startDate = new Date(baseDate);
+        startDate.setUTCDate(startDate.getUTCDate() - 29);
         
         const response = await fetch(
             `/api/tasks/${taskId}/run-status?` +
@@ -437,17 +469,18 @@
         // Update calendar blocks
         const blocks = document.querySelectorAll('#calendar > div');
         blocks.forEach(block => {
-            const date = new Date();
-            date.setDate(date.getDate() - parseInt(block.dataset.dayOffset));
-            const dateStr = date.toISOString().split('T')[0];
+            const dateStr = block.dataset.date;
             
             const status = statusData[dateStr]?.status;
+            // Reset classes
+            block.classList.remove('bg-gray-700', 'bg-red-600', 'bg-green-600');
+            
             if (status === 'success') {
-                block.classList.remove('bg-gray-700', 'bg-red-600');
                 block.classList.add('bg-green-600');
             } else if (status === 'failure') {
-                block.classList.remove('bg-gray-700', 'bg-green-600');
                 block.classList.add('bg-red-600');
+            } else {
+                block.classList.add('bg-gray-700');
             }
         });
     }
@@ -643,6 +676,36 @@
             // Don't reset on temporary errors, let it try again
         }
     }
+
+    // Calendar navigation functions
+    function updateNavigationButtons() {
+        const nextButton = document.getElementById('calendar-next');
+        const prevButton = document.getElementById('calendar-prev');
+        
+        // Disable next button if we're at the current period (can't go into future)
+        nextButton.disabled = calendarOffset >= 0;
+        nextButton.style.opacity = calendarOffset >= 0 ? '0.5' : '1';
+        nextButton.style.cursor = calendarOffset >= 0 ? 'not-allowed' : 'pointer';
+    }
+    
+    function navigateCalendar(direction) {
+        if (direction === 'next' && calendarOffset >= 0) {
+            return; // Can't go into future
+        }
+        
+        calendarOffset += direction === 'next' ? 1 : -1;
+        renderCalendar();
+        updateCalendarColors();
+    }
+    
+    // Calendar navigation event listeners
+    document.getElementById('calendar-prev').addEventListener('click', () => {
+        navigateCalendar('prev');
+    });
+    
+    document.getElementById('calendar-next').addEventListener('click', () => {
+        navigateCalendar('next');
+    });
 
     // Initial load
     loadTask();
