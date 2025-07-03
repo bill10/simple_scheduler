@@ -296,7 +296,7 @@
     async function loadRunsForDate(date) {
         const dateStr = date.toISOString().split('T')[0];
         const response = await fetch(`/api/tasks/${taskId}/runs?date=${dateStr}`);
-        const runs = await response.json();
+        const groupedRuns = await response.json();
         
         const runList = document.getElementById('run-list');
         const statusClasses = {
@@ -306,40 +306,131 @@
             'pending': 'bg-gray-600'
         };
 
+        // Helper function to get overall status for a group
+        function getGroupStatus(runs) {
+            if (runs.some(r => r.status === 'running')) return 'running';
+            if (runs.some(r => r.status === 'pending')) return 'pending';
+            if (runs.some(r => r.status === 'failure')) return 'failure';
+            return 'success';
+        }
+
+        // Helper function to get group summary
+        function getGroupSummary(runs) {
+            const total = runs.length;
+            const successful = runs.filter(r => r.status === 'success').length;
+            const failed = runs.filter(r => r.status === 'failure').length;
+            const running = runs.filter(r => r.status === 'running').length;
+            const pending = runs.filter(r => r.status === 'pending').length;
+            
+            if (total === 1) {
+                const run = runs[0];
+                if (run.status === 'pending') return 'Pending...';
+                if (run.status === 'running') return 'Running...';
+                return `Duration: ${run.duration ? run.duration.toFixed(2) + 's' : 'N/A'}`;
+            }
+            
+            let parts = [];
+            if (successful > 0) parts.push(`${successful} success`);
+            if (failed > 0) parts.push(`${failed} failed`);
+            if (running > 0) parts.push(`${running} running`);
+            if (pending > 0) parts.push(`${pending} pending`);
+            
+            return `${total} runs: ${parts.join(', ')}`;
+        }
+
         // Always show the header and container
         runList.innerHTML = `
             <h3 class="text-xl font-semibold mb-4">Runs for ${date.toLocaleDateString('en-US', { timeZone: 'UTC' })} (UTC)</h3>
             <div class="space-y-4 ml-4">
-                ${runs.length === 0 ? 
+                ${groupedRuns.length === 0 ? 
                     '<div class="text-gray-400">No runs found for this date</div>' :
-                    runs.map(run => `
-                        <div class="bg-gray-700 rounded p-4 flex justify-between items-center">
-                            <div>
-                                <div class="font-medium">${new Date(run.start_time).toLocaleTimeString('en-US', { timeZone: 'UTC' })}</div>
-                                <div class="text-sm text-gray-400">
-                                    ${run.status === 'pending' ? 'Pending...' : 
-                                      run.status === 'running' ? 'Running...' : 
-                                      `Duration: ${run.duration ? run.duration.toFixed(2) + 's' : 'N/A'}`}
+                    groupedRuns.map((group, groupIndex) => {
+                        const groupStatus = getGroupStatus(group.runs);
+                        const groupSummary = getGroupSummary(group.runs);
+                        const hasMultipleRuns = group.runs.length > 1;
+                        
+                        return `
+                            <div class="bg-gray-700 rounded">
+                                <div class="p-4 flex justify-between items-center ${hasMultipleRuns ? 'cursor-pointer hover:bg-gray-600' : ''}" 
+                                     ${hasMultipleRuns ? `onclick="toggleRunGroup(${groupIndex})"` : ''}>
+                                    <div>
+                                        <div class="font-medium flex items-center gap-2">
+                                            ${group.scheduled_time_display}
+                                            ${hasMultipleRuns ? `
+                                                <svg id="expand-icon-${groupIndex}" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transform transition-transform" viewBox="0 0 20 20" fill="currentColor">
+                                                    <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                                                </svg>
+                                            ` : ''}
+                                        </div>
+                                        <div class="text-sm text-gray-400">
+                                            ${groupSummary}
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center gap-3">
+                                        ${!hasMultipleRuns && group.runs[0].status !== 'pending' ? `
+                                            <button onclick="viewLog(${group.runs[0].id})" class="text-gray-400 hover:text-white">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                    <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
+                                                    <path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd" />
+                                                </svg>
+                                            </button>
+                                        ` : ''}
+                                        <span class="px-2 py-1 rounded text-sm ${statusClasses[groupStatus] || 'bg-gray-600'}">
+                                            ${groupStatus}
+                                        </span>
+                                    </div>
                                 </div>
-                            </div>
-                            <div class="flex items-center gap-3">
-                                ${run.status !== 'pending' ? `
-                                    <button onclick="viewLog(${run.id})" class="text-gray-400 hover:text-white">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                            <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
-                                            <path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd" />
-                                        </svg>
-                                    </button>
+                                ${hasMultipleRuns ? `
+                                    <div id="run-details-${groupIndex}" class="hidden border-t border-gray-600">
+                                        <div class="p-4 space-y-3">
+                                            ${group.runs.map(run => `
+                                                <div class="bg-gray-600 rounded p-3 flex justify-between items-center">
+                                                    <div>
+                                                        <div class="text-sm font-medium">${new Date(run.start_time).toLocaleTimeString('en-US', { timeZone: 'UTC' })}</div>
+                                                        <div class="text-xs text-gray-400">
+                                                            ${run.status === 'pending' ? 'Pending...' : 
+                                                              run.status === 'running' ? 'Running...' : 
+                                                              `Duration: ${run.duration ? run.duration.toFixed(2) + 's' : 'N/A'}`}
+                                                        </div>
+                                                    </div>
+                                                    <div class="flex items-center gap-2">
+                                                        ${run.status !== 'pending' ? `
+                                                            <button onclick="viewLog(${run.id})" class="text-gray-400 hover:text-white">
+                                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                                                    <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
+                                                                    <path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd" />
+                                                                </svg>
+                                                            </button>
+                                                        ` : ''}
+                                                        <span class="px-2 py-1 rounded text-xs ${statusClasses[run.status] || 'bg-gray-600'}">
+                                                            ${run.status}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            `).join('')}
+                                        </div>
+                                    </div>
                                 ` : ''}
-                                <span class="px-2 py-1 rounded text-sm ${statusClasses[run.status] || 'bg-gray-600'}">
-                                    ${run.status}
-                                </span>
                             </div>
-                        </div>
-                    `).join('')
+                        `;
+                    }).join('')
                 }
             </div>
         `;
+    }
+
+    // Toggle run group expansion
+    function toggleRunGroup(groupIndex) {
+        const detailsElement = document.getElementById(`run-details-${groupIndex}`);
+        const iconElement = document.getElementById(`expand-icon-${groupIndex}`);
+        
+        if (detailsElement.classList.contains('hidden')) {
+            detailsElement.classList.remove('hidden');
+            iconElement.classList.add('rotate-180');
+        } else {
+            detailsElement.classList.add('hidden');
+            iconElement.classList.remove('rotate-180');
+        }
     }
 
     // Event Listeners

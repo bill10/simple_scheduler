@@ -145,14 +145,36 @@ def get_task_runs(task_id):
     query = query.order_by(TaskRun.start_time.asc())
     
     runs = query.all()
-    return jsonify([{
-        'id': run.id,
-        'start_time': ensure_utc(run.start_time).isoformat() if run.start_time else None,
-        'end_time': ensure_utc(run.end_time).isoformat() if run.end_time else None,
-        'status': run.status,
-        'duration': run.duration,
-        'log_file': run.log_file
-    } for run in runs])
+    
+    # Group runs by scheduled time (hour:minute)
+    grouped_runs = {}
+    for run in runs:
+        if run.start_time:
+            # Extract scheduled time (hour:minute) as the grouping key
+            scheduled_time = run.start_time.replace(second=0, microsecond=0)
+            scheduled_time_key = scheduled_time.strftime('%H:%M')
+            
+            if scheduled_time_key not in grouped_runs:
+                grouped_runs[scheduled_time_key] = {
+                    'scheduled_time': scheduled_time.isoformat(),
+                    'scheduled_time_display': scheduled_time_key,
+                    'runs': []
+                }
+            
+            grouped_runs[scheduled_time_key]['runs'].append({
+                'id': run.id,
+                'start_time': ensure_utc(run.start_time).isoformat(),
+                'end_time': ensure_utc(run.end_time).isoformat() if run.end_time else None,
+                'status': run.status,
+                'duration': run.duration,
+                'log_file': run.log_file
+            })
+    
+    # Convert to list and sort by scheduled time
+    result = list(grouped_runs.values())
+    result.sort(key=lambda x: x['scheduled_time'])
+    
+    return jsonify(result)
 
 @bp.route('/tasks/<int:task_id>/run-status', methods=['GET'])
 @login_required
