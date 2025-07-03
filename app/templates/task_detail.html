@@ -38,6 +38,10 @@
                     <p class="cron-schedule mt-1"></p>
                 </div>
                 <div>
+                    <label class="block text-sm font-medium text-gray-400">Next Run (UTC)</label>
+                    <p class="next-run mt-1 text-green-400"></p>
+                </div>
+                <div>
                     <label class="block text-sm font-medium text-gray-400">Extra Arguments</label>
                     <p class="extra-args mt-1"></p>
                 </div>
@@ -205,6 +209,16 @@
         document.querySelector('.task-description').textContent = task.description;
         document.querySelector('.script-path').textContent = task.script_path;
         document.querySelector('.cron-schedule').textContent = task.cron_schedule;
+        document.querySelector('.next-run').textContent = task.next_run ? new Date(task.next_run).toLocaleString('en-US', {
+            timeZone: 'UTC',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+        }) + ' UTC' : 'Not scheduled';
         document.querySelector('.extra-args').textContent = task.extra_args || 'None';
         document.querySelector('.start-date').textContent = task.start_date ? new Date(task.start_date).toLocaleDateString() : 'Not set';
         document.querySelector('.end-date').textContent = task.end_date ? new Date(task.end_date).toLocaleDateString() : 'Not set';
