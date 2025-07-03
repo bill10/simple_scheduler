@@ -1,14 +1,14 @@
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_ERROR
-from flask import current_app
 import os
 
 scheduler = None
 
 def init_scheduler(app):
     global scheduler
-    if scheduler is None:
+    # Only initialize scheduler in main process, not in Flask's reloader process
+    if scheduler is None and (os.environ.get('WERKZEUG_RUN_MAIN') or not app.debug):
         jobstores = {
             'default': SQLAlchemyJobStore(url='sqlite:///jobs.sqlite')
         }
