@@ -60,7 +60,30 @@
 
         <!-- Statistics -->
         <div class="bg-gray-800 rounded-lg p-6">
-            <h2 class="text-xl font-semibold mb-4">Statistics</h2>
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-xl font-semibold">Statistics</h2>
+                <span id="filter-status" class="text-sm text-blue-400">
+                    <i class="fas fa-filter mr-1"></i>
+                    Last 24 Hours
+                </span>
+            </div>
+            
+            <!-- Quick Range Filter -->
+            <div class="mb-4 flex flex-wrap gap-2 justify-start">
+                <button class="quick-range-btn px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs" data-range="24h">
+                    Last 24 Hours
+                </button>
+                <button class="quick-range-btn px-3 py-1 bg-gray-600 hover:bg-gray-500 text-white rounded text-xs" data-range="7d">
+                    Last 7 Days
+                </button>
+                <button class="quick-range-btn px-3 py-1 bg-gray-600 hover:bg-gray-500 text-white rounded text-xs" data-range="30d">
+                    Last 30 Days
+                </button>
+                <button class="quick-range-btn px-3 py-1 bg-gray-600 hover:bg-gray-500 text-white rounded text-xs" data-range="all">
+                    All Time
+                </button>
+            </div>
+            
             <div class="grid grid-cols-2 gap-4 mb-6">
                 <div class="bg-gray-700 rounded p-4">
                     <div class="text-sm text-gray-400">Total Runs</div>
@@ -71,6 +94,7 @@
                     <div class="text-2xl font-bold success-rate mt-1">0%</div>
                 </div>
             </div>
+            
             <div>
                 <canvas id="duration-chart"></canvas>
             </div>
@@ -226,9 +250,55 @@
         document.getElementById('toggle-active').textContent = task.is_active ? 'Pause' : 'Resume';
     }
 
-    async function loadStatistics() {
+    // Store all runs globally for filtering
+    let allRuns = [];
+    
+    async function loadStatistics(startDate = null, endDate = null) {
         const response = await fetch(`/api/tasks/${taskId}/runs`);
-        const runs = await response.json();
+        const groupedRuns = await response.json();
+        
+        // Flatten grouped runs into a single array and sort by start_time
+        allRuns = [];
+        groupedRuns.forEach(group => {
+            allRuns.push(...group.runs);
+        });
+        
+        // Sort runs chronologically by start_time
+        allRuns.sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
+        
+        // Apply date filtering if specified
+        let filteredRuns = allRuns;
+        if (startDate || endDate) {
+            filteredRuns = allRuns.filter(run => {
+                const runDate = new Date(run.start_time);
+                const start = startDate ? new Date(startDate + 'T00:00:00Z') : null;
+                const end = endDate ? new Date(endDate + 'T23:59:59Z') : null;
+                
+                if (start && runDate < start) return false;
+                if (end && runDate > end) return false;
+                return true;
+            });
+        }
+        
+        // Update statistics with filtered data
+        const runs = filteredRuns;
+        
+        // Show/hide filter status indicator
+        const filterStatus = document.getElementById('filter-status');
+        if (startDate || endDate) {
+            filterStatus.classList.remove('hidden');
+            let filterText = 'Filtered';
+            if (startDate && endDate) {
+                filterText = `${startDate} to ${endDate}`;
+            } else if (startDate) {
+                filterText = `From ${startDate}`;
+            } else if (endDate) {
+                filterText = `Until ${endDate}`;
+            }
+            filterStatus.innerHTML = `<i class="fas fa-filter mr-1"></i>${filterText}`;
+        } else {
+            filterStatus.classList.add('hidden');
+        }
         
         document.querySelector('.total-runs').textContent = runs.length;
         
@@ -811,10 +881,69 @@
     document.getElementById('calendar-next').addEventListener('click', () => {
         navigateCalendar('next');
     });
+    
+    // Function to reset quick range button states
+    function resetQuickRangeButtons() {
+        document.querySelectorAll('.quick-range-btn').forEach(btn => {
+            btn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+            btn.classList.add('bg-gray-600', 'hover:bg-gray-500');
+        });
+    }
+    
+    // Manual date inputs removed - only quick range buttons now
+    
+    // Quick range shortcut event listeners
+    document.querySelectorAll('.quick-range-btn').forEach(button => {
+        button.addEventListener('click', () => {
+            // Reset all buttons and activate clicked one
+            resetQuickRangeButtons();
+            button.classList.remove('bg-gray-600', 'hover:bg-gray-500');
+            button.classList.add('bg-blue-600', 'hover:bg-blue-700');
+            
+            const range = button.getAttribute('data-range');
+            const now = new Date();
+            let startDate = null;
+            let endDate = null;
+            
+            // Calculate date range based on selection
+            switch(range) {
+                case '24h':
+                    startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+                    endDate = now;
+                    break;
+                case '7d':
+                    startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                    endDate = now;
+                    break;
+                case '30d':
+                    startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                    endDate = now;
+                    break;
+                case 'all':
+                    // Show all time data
+                    loadStatistics();
+                    return;
+            }
+            
+            // Apply the filter automatically
+            loadStatistics(
+                startDate ? startDate.toISOString().split('T')[0] : null,
+                endDate ? endDate.toISOString().split('T')[0] : null
+            );
+        });
+    });
 
-    // Initial load
+    // Initial load with Last 24 Hours default
     loadTask();
-    loadStatistics();
+    
+    // Set Last 24 Hours as default
+    const now = new Date();
+    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    loadStatistics(
+        yesterday.toISOString().split('T')[0],
+        now.toISOString().split('T')[0]
+    );
+    
     renderCalendar();
     updateCalendarColors();
     
