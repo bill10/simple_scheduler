@@ -74,7 +74,7 @@ def execute_task(task_id):
     db.session.add(run)
     db.session.commit()
     
-    cmd = ['python', os.path.join(current_app.config['SCRIPTS_FOLDER'], task.script_path)]
+    cmd = ['python', os.path.join(flask_app.config['SCRIPTS_FOLDER'], task.script_path)]
     cmd.append(start_time.isoformat())
     if task.extra_args:
         cmd.extend(task.extra_args.split())
