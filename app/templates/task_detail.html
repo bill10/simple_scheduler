@@ -216,6 +216,29 @@
         <pre id="test-run-output" class="bg-gray-900 p-4 rounded overflow-auto"></pre>
     </div>
 </div>
+
+<!-- Rerun Confirmation Modal -->
+<div id="rerun-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden">
+    <div class="fixed inset-0 flex items-center justify-center p-4">
+        <div class="bg-gray-800 rounded-lg p-6 max-w-md w-full">
+            <div class="flex items-center mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-blue-400 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <h3 class="text-xl font-semibold">Confirm Rerun</h3>
+            </div>
+            <p class="text-gray-300 mb-6">Are you sure you want to rerun this task? This will execute the task again with the same scheduled time as the original run.</p>
+            <div class="flex justify-end space-x-4">
+                <button id="rerun-cancel" class="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded">
+                    Cancel
+                </button>
+                <button id="rerun-confirm" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded">
+                    Rerun Task
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -452,10 +475,15 @@
                                     </div>
                                     <div class="flex items-center gap-3">
                                         ${!hasMultipleRuns && group.runs[0].status !== 'pending' ? `
-                                            <button onclick="viewLog(${group.runs[0].id})" class="text-gray-400 hover:text-white">
+                                            <button onclick="viewLog(${group.runs[0].id})" class="text-gray-400 hover:text-white" title="View Log">
                                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                                                     <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
                                                     <path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd" />
+                                                </svg>
+                                            </button>
+                                            <button onclick="confirmRerun(${group.runs[0].id})" class="text-blue-400 hover:text-blue-300" title="Rerun">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                    <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" />
                                                 </svg>
                                             </button>
                                         ` : ''}
@@ -479,10 +507,15 @@
                                                     </div>
                                                     <div class="flex items-center gap-2">
                                                         ${run.status !== 'pending' ? `
-                                                            <button onclick="viewLog(${run.id})" class="text-gray-400 hover:text-white">
+                                                            <button onclick="viewLog(${run.id})" class="text-gray-400 hover:text-white" title="View Log">
                                                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                                                                     <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
                                                                     <path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd" />
+                                                                </svg>
+                                                            </button>
+                                                            <button onclick="confirmRerun(${run.id})" class="text-blue-400 hover:text-blue-300" title="Rerun">
+                                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                                                    <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" />
                                                                 </svg>
                                                             </button>
                                                         ` : ''}
@@ -573,6 +606,22 @@
             document.getElementById('log-modal').classList.add('hidden');
         });
     });
+    
+    // Rerun modal event listeners
+    document.getElementById('rerun-cancel').addEventListener('click', () => {
+        document.getElementById('rerun-modal').classList.add('hidden');
+        currentRerunId = null;
+    });
+    
+    document.getElementById('rerun-confirm').addEventListener('click', executeRerun);
+    
+    // Close rerun modal when clicking outside
+    document.getElementById('rerun-modal').addEventListener('click', (e) => {
+        if (e.target.id === 'rerun-modal') {
+            document.getElementById('rerun-modal').classList.add('hidden');
+            currentRerunId = null;
+        }
+    });
 
     // View log function
     async function viewLog(runId) {
@@ -592,6 +641,54 @@
             }
         } catch (error) {
             content.textContent = `Error: ${error.message}`;
+        }
+    }
+
+    // Rerun confirmation function
+    let currentRerunId = null;
+    
+    function confirmRerun(runId) {
+        currentRerunId = runId;
+        document.getElementById('rerun-modal').classList.remove('hidden');
+    }
+    
+    // Rerun execution function
+    async function executeRerun() {
+        if (!currentRerunId) return;
+        
+        const confirmButton = document.getElementById('rerun-confirm');
+        const originalText = confirmButton.textContent;
+        confirmButton.textContent = 'Running...';
+        confirmButton.disabled = true;
+        
+        try {
+            const response = await fetch(`/api/tasks/${taskId}/runs/${currentRerunId}/rerun`, {
+                method: 'POST'
+            });
+            const result = await response.json();
+            
+            if (response.ok) {
+                // Close modal
+                document.getElementById('rerun-modal').classList.add('hidden');
+                
+                // Show success message
+                alert(`Rerun ${result.status === 'success' ? 'completed successfully' : 'failed'}. Duration: ${result.duration?.toFixed(2)}s`);
+                
+                // Refresh the run list for the current date
+                const currentDate = new Date();
+                await loadRunsForDate(currentDate);
+                
+                // Refresh statistics
+                await loadStatistics();
+            } else {
+                alert(`Rerun failed: ${result.error || 'Unknown error'}`);
+            }
+        } catch (error) {
+            alert(`Rerun failed: ${error.message}`);
+        } finally {
+            confirmButton.textContent = originalText;
+            confirmButton.disabled = false;
+            currentRerunId = null;
         }
     }
 

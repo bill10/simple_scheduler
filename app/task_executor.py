@@ -24,8 +24,11 @@ def execute_task(task_id):
             return
         
         start_time = datetime.utcnow()
+        # Log file format: task_{task_id}_{scheduled_time}_{execution_time}
+        # For scheduled runs, scheduled time and execution time are the same
+        time_str = start_time.strftime("%Y%m%d_%H%M%S")
         log_file = os.path.join(flask_app.config['LOGS_FOLDER'],
-            f'task_{task.id}_{start_time.strftime("%Y%m%d_%H%M%S")}.log')
+            f'task_{task.id}_{time_str}_{time_str}.log')
         
         run = TaskRun(
             task_id=task.id,

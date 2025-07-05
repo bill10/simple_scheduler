@@ -121,6 +121,42 @@ def test_task(task_id):
     result = run_task(task, test_mode=True)
     return jsonify(result)
 
+@bp.route('/tasks/<int:task_id>/runs/<int:run_id>/rerun', methods=['POST'])
+@login_required
+def rerun_task(task_id, run_id):
+    task = Task.query.get_or_404(task_id)
+    original_run = TaskRun.query.filter_by(id=run_id, task_id=task_id).first_or_404()
+    
+    # Use the original run's start time as the scheduled time for the rerun
+    # Round to the nearest minute to match the original scheduled time
+    scheduled_time = original_run.start_time.replace(second=0, microsecond=0)
+    
+    # Create a new TaskRun record for the rerun
+    execution_start = datetime.utcnow()
+    
+    new_run = TaskRun(
+        task_id=task.id,
+        start_time=scheduled_time,  # Use the original scheduled time
+        status='running'
+    )
+    db.session.add(new_run)
+    db.session.commit()
+    
+    # Execute the task with the scheduled time
+    result = run_task(task, test_mode=False, scheduled_time=scheduled_time)
+    
+    # Update the TaskRun record with the results
+    execution_end = datetime.utcnow()
+    duration = (execution_end - execution_start).total_seconds()
+    
+    new_run.end_time = execution_end
+    new_run.status = result['status']
+    new_run.duration = duration
+    new_run.log_file = result['log_file']  # Use the log file from run_task
+    db.session.commit()
+    
+    return jsonify(result)
+
 @bp.route('/tasks/<int:task_id>/runs', methods=['GET'])
 @login_required
 def get_task_runs(task_id):
@@ -268,8 +304,11 @@ def run_task(task, test_mode=False, scheduled_time=None):
     execution_start = datetime.utcnow()
     script_time = scheduled_time if scheduled_time else execution_start
     
+    # Log file format: task_{task_id}_{scheduled_time}_{execution_time}
+    scheduled_str = script_time.strftime("%Y%m%d_%H%M%S")
+    execution_str = execution_start.strftime("%Y%m%d_%H%M%S")
     log_file = os.path.join(current_app.config['LOGS_FOLDER'],
-        f'task_{task.id}_{script_time.strftime("%Y%m%d_%H%M%S")}.log')
+        f'task_{task.id}_{scheduled_str}_{execution_str}.log')
     
     cmd = ['python', os.path.join(current_app.config['SCRIPTS_FOLDER'], task.script_path)]
     cmd.append(script_time.isoformat())
