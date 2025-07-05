@@ -452,7 +452,8 @@
                 ${groupedRuns.length === 0 ? 
                     '<div class="text-gray-400">No runs found for this date</div>' :
                     groupedRuns.map((group, groupIndex) => {
-                        const groupStatus = getGroupStatus(group.runs);
+                        // Use group status from backend (determined by latest execution time)
+                        const groupStatus = group.status || getGroupStatus(group.runs);
                         const groupSummary = getGroupSummary(group.runs);
                         const hasMultipleRuns = group.runs.length > 1;
                         
@@ -462,7 +463,10 @@
                                      ${hasMultipleRuns ? `onclick="toggleRunGroup(${groupIndex})"` : ''}>
                                     <div>
                                         <div class="font-medium flex items-center gap-2">
-                                            ${group.scheduled_time_display}
+                                            ${hasMultipleRuns ? 
+                                                `Scheduled: ${group.scheduled_time_display}` : 
+                                                `Scheduled: ${group.scheduled_time_display} | Executed: ${group.runs[0].execution_time ? new Date(group.runs[0].execution_time).toLocaleTimeString('en-US', { timeZone: 'UTC' }) : 'N/A'}`
+                                            }
                                             ${hasMultipleRuns ? `
                                                 <svg id="expand-icon-${groupIndex}" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transform transition-transform" viewBox="0 0 20 20" fill="currentColor">
                                                     <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
@@ -498,7 +502,9 @@
                                             ${group.runs.map(run => `
                                                 <div class="bg-gray-600 rounded p-3 flex justify-between items-center">
                                                     <div>
-                                                        <div class="text-sm font-medium">${new Date(run.start_time).toLocaleTimeString('en-US', { timeZone: 'UTC' })}</div>
+                                                        <div class="text-sm font-medium">
+                                                            Execution: ${run.execution_time ? new Date(run.execution_time).toLocaleString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'N/A'}
+                                                        </div>
                                                         <div class="text-xs text-gray-400">
                                                             ${run.status === 'pending' ? 'Pending...' : 
                                                               run.status === 'running' ? 'Running...' : 

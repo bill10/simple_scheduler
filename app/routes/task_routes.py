@@ -203,8 +203,30 @@ def get_task_runs(task_id):
                 'end_time': ensure_utc(run.end_time).isoformat() if run.end_time else None,
                 'status': run.status,
                 'duration': run.duration,
-                'log_file': run.log_file
+                'log_file': run.log_file,
+                'execution_time': run.created_at  # Actual execution time from DB
             })
+    
+    # For each group, sort runs by execution time and determine group status from latest run
+    for group in grouped_runs.values():
+        # First, determine group status from the run with the latest execution time
+        group['runs'].sort(key=lambda x: x['execution_time'] if x['execution_time'] else datetime.min, reverse=True)
+        
+        # Group status is determined by the run with the latest execution time (first in sorted list)
+        if group['runs']:
+            group['status'] = group['runs'][0]['status']
+        else:
+            group['status'] = 'unknown'
+        
+        # Now sort runs by execution time ascending (oldest first) for display
+        group['runs'].sort(key=lambda x: x['execution_time'] if x['execution_time'] else datetime.min, reverse=False)
+        
+        # Convert execution_time to ISO format for frontend display and keep it in response
+        for run in group['runs']:
+            if run['execution_time']:
+                run['execution_time'] = ensure_utc(run['execution_time']).isoformat()
+            else:
+                run['execution_time'] = None
     
     # Convert to list and sort by scheduled time
     result = list(grouped_runs.values())
