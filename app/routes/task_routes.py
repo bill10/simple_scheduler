@@ -254,56 +254,58 @@ def get_task_run_status(task_id):
     
     runs = query.order_by(TaskRun.start_time).all()
     
-    # Group runs by date and scheduled time (hour:minute)
+    # Group runs by scheduled time (same logic as get_task_runs)
     from collections import defaultdict
-    daily_runs = defaultdict(lambda: defaultdict(list))
+    grouped_runs = {}
     
     for run in runs:
-        date_str = run.start_time.strftime('%Y-%m-%d')
-        # Group by scheduled time (hour:minute) to identify reruns
-        time_key = run.start_time.strftime('%H:%M')
-        daily_runs[date_str][time_key].append(run)
+        # Group by scheduled time rounded to the nearest minute
+        scheduled_time = run.start_time.replace(second=0, microsecond=0)
+        scheduled_time_key = scheduled_time.strftime('%Y-%m-%d %H:%M')
+        
+        if scheduled_time_key not in grouped_runs:
+            grouped_runs[scheduled_time_key] = {
+                'scheduled_time': scheduled_time,
+                'runs': []
+            }
+        
+        grouped_runs[scheduled_time_key]['runs'].append(run)
     
-    # Determine status for each date
+    # Determine group status for each group (same logic as get_task_runs)
+    for group in grouped_runs.values():
+        # Sort runs by execution time (created_at) to find the latest
+        group['runs'].sort(key=lambda x: x.created_at if x.created_at else datetime.min, reverse=True)
+        
+        # Group status is determined by the run with the latest execution time
+        if group['runs']:
+            group['status'] = group['runs'][0].status
+        else:
+            group['status'] = 'unknown'
+    
+    # Group by date and determine daily status based on group statuses
+    daily_groups = defaultdict(list)
+    for group in grouped_runs.values():
+        date_str = group['scheduled_time'].strftime('%Y-%m-%d')
+        daily_groups[date_str].append(group)
+    
+    # Determine status for each date based on group statuses
     date_statuses = {}
     
-    for date_str, time_groups in daily_runs.items():
-        all_time_slots_resolved = True
-        has_any_runs = False
-        
-        for time_key, time_runs in time_groups.items():
-            has_any_runs = True
-            # Sort runs by start_time to get chronological order
-            time_runs.sort(key=lambda r: r.start_time)
-            
-            # Check if this time slot is resolved (no unresolved failures)
-            time_slot_resolved = True
-            
-            for run in time_runs:
-                if run.status == 'failure':
-                    # Check if there's a newer successful run after this failure
-                    has_later_success = any(
-                        later_run.status == 'success' and later_run.start_time > run.start_time
-                        for later_run in time_runs
-                    )
-                    if not has_later_success:
-                        time_slot_resolved = False
-                        break
-                elif run.status in ['running', 'pending']:
-                    # Consider running/pending as unresolved for now
-                    time_slot_resolved = False
-            
-            if not time_slot_resolved:
-                all_time_slots_resolved = False
-                break
-        
-        if not has_any_runs:
-            # No runs for this date - don't include in results
+    for date_str, groups in daily_groups.items():
+        if not groups:
             continue
-        elif all_time_slots_resolved:
+            
+        # If all groups are success, day is success
+        # If any group is failure, day is failure
+        group_statuses = [group['status'] for group in groups]
+        
+        if all(status == 'success' for status in group_statuses):
             date_statuses[date_str] = {'status': 'success'}
-        else:
+        elif any(status == 'failure' for status in group_statuses):
             date_statuses[date_str] = {'status': 'failure'}
+        else:
+            # All groups are running/pending/unknown
+            date_statuses[date_str] = {'status': 'pending'}
     
     return jsonify(date_statuses)
 
