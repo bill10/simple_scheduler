@@ -448,6 +448,7 @@
         // Always show the header and container
         runList.innerHTML = `
             <h3 class="text-xl font-semibold mb-4">Runs for ${date.toLocaleDateString('en-US', { timeZone: 'UTC' })} (UTC)</h3>
+            ${groupedRuns.length > 0 ? `<div class="text-sm text-gray-400 mb-4">${groupedRuns.length} group${groupedRuns.length === 1 ? '' : 's'}</div>` : ''}
             <div class="space-y-4 ml-4">
                 ${groupedRuns.length === 0 ? 
                     '<div class="text-gray-400">No runs found for this date</div>' :
@@ -503,7 +504,7 @@
                                                 <div class="bg-gray-600 rounded p-3 flex justify-between items-center">
                                                     <div>
                                                         <div class="text-sm font-medium">
-                                                            Execution: ${run.execution_time ? new Date(run.execution_time).toLocaleString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'N/A'}
+                                                             Executed: ${run.execution_time ? new Date(run.execution_time).toLocaleString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'N/A'}
                                                         </div>
                                                         <div class="text-xs text-gray-400">
                                                             ${run.status === 'pending' ? 'Pending...' : 
